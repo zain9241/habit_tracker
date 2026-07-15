@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'login_screen.dart';
+import 'DetailScreen.dart';
+import 'add_habit_screen.dart';
 
 class HabitTrackerScreen extends StatefulWidget {
   final String username;
@@ -15,15 +16,6 @@ class _HabitTrackerScreenState extends State<HabitTrackerScreen> {
   Map<String, String> selectedHabitsMap = {};
   Map<String, String> completedHabitsMap = {};
   String name = '';
-
-  static const List<Color> _presetColors = [
-    Colors.blue,
-    Colors.green,
-    Colors.orange,
-    Colors.purple,
-    Colors.teal,
-    Colors.pink,
-  ];
 
   @override
   void initState() {
@@ -43,10 +35,6 @@ class _HabitTrackerScreenState extends State<HabitTrackerScreen> {
     return Color(int.parse('0x$hexColor'));
   }
 
-  String _colorToHex(Color color) {
-    return '#${color.value.toRadixString(16).substring(2).toUpperCase()}';
-  }
-
   Color _getHabitColor(String habit, Map<String, String> habitsMap) {
     String? colorHex = habitsMap[habit];
     if (colorHex != null) {
@@ -59,71 +47,74 @@ class _HabitTrackerScreenState extends State<HabitTrackerScreen> {
     return Colors.blue; // Default color in case of error.
   }
 
-  void _showAddHabitDialog() {
-    final habitController = TextEditingController();
-    Color selectedColor = _presetColors[0];
+  /// Builds a human-readable summary of the user's habits so it can be
+  /// passed into DetailScreen's `description` field (since DetailScreen
+  /// only accepts a ListItem with title + description, not raw maps).
+  String _buildHabitsSummary() {
+    final buffer = StringBuffer();
 
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text('Add Habit'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: habitController,
-                    autofocus: true,
-                    decoration:
-                    const InputDecoration(labelText: 'Habit name'),
-                  ),
-                  const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 10,
-                    children: _presetColors.map((color) {
-                      final isSelected = selectedColor == color;
-                      return GestureDetector(
-                        onTap: () =>
-                            setDialogState(() => selectedColor = color),
-                        child: CircleAvatar(
-                          backgroundColor: color,
-                          radius: 16,
-                          child: isSelected
-                              ? const Icon(Icons.check,
-                              color: Colors.white, size: 16)
-                              : null,
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    final habitName = habitController.text.trim();
-                    if (habitName.isEmpty) return;
+    buffer.writeln('To Do (${selectedHabitsMap.length}):');
+    if (selectedHabitsMap.isEmpty) {
+      buffer.writeln('  No habits yet.');
+    } else {
+      for (final habit in selectedHabitsMap.keys) {
+        buffer.writeln('  • $habit');
+      }
+    }
 
-                    setState(() {
-                      selectedHabitsMap[habitName] = _colorToHex(selectedColor);
-                    });
-                    _saveHabits();
-                    Navigator.pop(dialogContext);
-                  },
-                  child: const Text('Add'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+    buffer.writeln();
+    buffer.writeln('Done (${completedHabitsMap.length}):');
+    if (completedHabitsMap.isEmpty) {
+      buffer.writeln('  Nothing completed yet.');
+    } else {
+      for (final habit in completedHabitsMap.keys) {
+        buffer.writeln('  • $habit');
+      }
+    }
+
+    return buffer.toString().trim();
+  }
+
+  void _openConfigureDetail() {
+    Navigator.pop(context); // close the drawer first
+
+    final selectedItem = ListItem(
+      title: name.isNotEmpty ? name : 'Loading...',
+      description: _buildHabitsSummary(),
     );
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => DetailScreen(item: selectedItem),
+      ),
+    );
+  }
+
+  Future<void> _openAddHabitScreen() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const AddHabitScreen()),
+    );
+
+    if (result != null && result is Map) {
+      setState(() {
+        selectedHabitsMap[result['name'] as String] =
+        result['color'] as String;
+      });
+      _saveHabits();
+    }
+  }
+
+  void _deleteHabit(String habit, {required bool fromCompleted}) {
+    setState(() {
+      if (fromCompleted) {
+        completedHabitsMap.remove(habit);
+      } else {
+        selectedHabitsMap.remove(habit);
+      }
+    });
+    _saveHabits();
   }
 
   Widget _buildDrawer() {
@@ -152,7 +143,11 @@ class _HabitTrackerScreenState extends State<HabitTrackerScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          _buildDrawerItem(Icons.settings, 'Configure'),
+          _buildDrawerItem(
+            Icons.settings,
+            'Configure',
+            onTap: _openConfigureDetail,
+          ),
           _buildDrawerItem(Icons.person_outline, 'Personal Info'),
           _buildDrawerItem(Icons.bar_chart, 'Reports', badged: true),
           _buildDrawerItem(Icons.notifications_none, 'Notifications'),
@@ -160,9 +155,9 @@ class _HabitTrackerScreenState extends State<HabitTrackerScreen> {
             Icons.logout,
             'Sign Out',
             onTap: () {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => const LoginScreen()),
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Sign Out — coming soon')),
               );
             },
           ),
@@ -257,7 +252,8 @@ class _HabitTrackerScreenState extends State<HabitTrackerScreen> {
                   background: Container(
                     color: Colors.green,
                     alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    padding:
+                    const EdgeInsets.symmetric(horizontal: 20),
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
@@ -270,7 +266,12 @@ class _HabitTrackerScreenState extends State<HabitTrackerScreen> {
                       ],
                     ),
                   ),
-                  child: _buildHabitCard(habit, habitColor),
+                  child: _buildHabitCard(
+                    habit,
+                    habitColor,
+                    onDelete: () =>
+                        _deleteHabit(habit, fromCompleted: false),
+                  ),
                 );
               },
             ),
@@ -315,7 +316,8 @@ class _HabitTrackerScreenState extends State<HabitTrackerScreen> {
                   background: Container(
                     color: Colors.red,
                     alignment: Alignment.centerLeft,
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    padding:
+                    const EdgeInsets.symmetric(horizontal: 20),
                     child: const Row(
                       children: [
                         Icon(Icons.undo, color: Colors.white),
@@ -327,8 +329,13 @@ class _HabitTrackerScreenState extends State<HabitTrackerScreen> {
                       ],
                     ),
                   ),
-                  child: _buildHabitCard(habit, habitColor,
-                      isCompleted: true),
+                  child: _buildHabitCard(
+                    habit,
+                    habitColor,
+                    isCompleted: true,
+                    onDelete: () =>
+                        _deleteHabit(habit, fromCompleted: true),
+                  ),
                 );
               },
             ),
@@ -336,7 +343,7 @@ class _HabitTrackerScreenState extends State<HabitTrackerScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _showAddHabitDialog,
+        onPressed: _openAddHabitScreen,
         backgroundColor: Colors.blue.shade700,
         tooltip: 'Add Habits',
         child: const Icon(Icons.add),
@@ -345,7 +352,7 @@ class _HabitTrackerScreenState extends State<HabitTrackerScreen> {
   }
 
   Widget _buildHabitCard(String title, Color color,
-      {bool isCompleted = false}) {
+      {bool isCompleted = false, required VoidCallback onDelete}) {
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
       color: color,
@@ -360,9 +367,17 @@ class _HabitTrackerScreenState extends State<HabitTrackerScreen> {
               fontSize: 16,
             ),
           ),
-          trailing: isCompleted
-              ? const Icon(Icons.check_circle, color: Colors.green, size: 28)
-              : null,
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isCompleted)
+                const Icon(Icons.check_circle, color: Colors.white, size: 26),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.white),
+                onPressed: onDelete,
+              ),
+            ],
+          ),
         ),
       ),
     );
