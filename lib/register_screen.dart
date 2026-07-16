@@ -1,7 +1,11 @@
+import 'dart:convert';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'country_list.dart';
 import 'habit_tracker_screen.dart';
 import 'login_screen.dart';
 
@@ -32,11 +36,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
     'Journal',
     'Walk 10,000 Steps'
   ];
+  final Map<String, Color> _habitColors = {
+    'Amber': Colors.amber,
+    'Red Accent': Colors.redAccent,
+    'Light Blue': Colors.lightBlue,
+    'Light Green': Colors.lightGreen,
+    'Purple Accent': Colors.purpleAccent,
+    'Orange': Colors.orange,
+    'Teal': Colors.teal,
+    'Deep Purple': Colors.deepPurple,
+  };
 
   @override
   void initState() {
     super.initState();
-    _fetchCountries();
+    _loadCountries();
   }
 
   @override
@@ -47,26 +61,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  Future<void> _fetchCountries() async {
-    List<String> subsetCountries = [
-      'United States',
-      'Canada',
-      'United Kingdom',
-      'Australia',
-      'India',
-      'Germany',
-      'France',
-      'Japan',
-      'China',
-      'Brazil',
-      'South Africa'
-    ];
-
-    setState(() {
-      _countries = subsetCountries;
-      _countries.sort();
-      _country = _countries.isNotEmpty ? _countries[0] : 'United States';
-    });
+  Future<void> _loadCountries() async {
+    try {
+      List<String> countries = await fetchCountries();
+      setState(() {
+        _countries = countries;
+        if (_countries.isNotEmpty) {
+          _country = _countries[0];
+        }
+      });
+    } catch (e) {
+      // Handle error
+      _showToast('Error fetching countries');
+    }
   }
 
   void _showToast(String message) {
@@ -80,14 +87,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  Future<void> _saveUserData() async {
+  Future<void> _saveUserData(Map<String, String> selectedHabitsMap) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('name', _nameController.text.trim());
     await prefs.setString('username', _usernameController.text.trim());
     await prefs.setString('password', _passwordController.text.trim());
     await prefs.setInt('age', _age.round());
     await prefs.setString('country', _country);
-    await prefs.setStringList('habits', selectedHabits);
+    await prefs.setString('selectedHabitsMap', jsonEncode(selectedHabitsMap));
   }
 
   void _register() async {
@@ -105,7 +112,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
-    await _saveUserData();
+    // Assign random colors to selected habits.
+    Map<String, String> selectedHabitsMap = {};
+    final random = Random();
+    final colorKeys = _habitColors.keys.toList();
+    for (var habit in selectedHabits) {
+      var randomColor =
+      _habitColors[colorKeys[random.nextInt(colorKeys.length)]]!;
+      selectedHabitsMap[habit] = randomColor.value.toRadixString(16);
+    }
+
+    await _saveUserData(selectedHabitsMap);
 
     if (!mounted) return;
 

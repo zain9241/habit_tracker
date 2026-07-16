@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'register_screen.dart';
 import 'habit_tracker_screen.dart';
+import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -27,36 +28,20 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _login() async {
-    final username = _usernameController.text.trim();
-    final password = _passwordController.text.trim();
+    final username = _usernameController.text;
+    final password = _passwordController.text;
 
-    if (username.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter username and password')),
-      );
-      return;
-    }
+    SharedPreferences prefs = await SharedPreferences.getInstance();
 
+    // Check against default credentials
     if (username == defaultUsername && password == defaultPassword) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => HabitTrackerScreen(username: username),
-        ),
-      );
-      return;
-    }
+      await prefs.setString('name', 'Test User');
+      await prefs.setString('username', 'testuser');
+      await prefs.setDouble('age', 25);
+      await prefs.setString('country', 'United States');
 
-    final prefs = await SharedPreferences.getInstance();
-    final storedUsername = prefs.getString('username');
-    final storedPassword = prefs.getString('password');
+      if (!mounted) return;
 
-    if (!mounted) return;
-
-    if (storedUsername != null &&
-        storedPassword != null &&
-        username == storedUsername &&
-        password == storedPassword) {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -64,8 +49,15 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invalid username or password')),
+      //empty out shared preferences
+      await prefs.clear();
+      Fluttertoast.showToast(
+        msg: "The username or password was incorrect",
+        toastLength: Toast.LENGTH_SHORT,
+        gravity: ToastGravity.BOTTOM,
+        backgroundColor: Colors.red,
+        textColor: Colors.white,
+        fontSize: 16.0,
       );
     }
   }
